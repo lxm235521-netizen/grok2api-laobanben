@@ -1,0 +1,25 @@
+services:
+  grok2api:
+    image: grok2api:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      TZ: Asia/Shanghai
+    command:
+      - sh
+      - -c
+      - >
+        granian --interface asgi --host "$${SERVER_HOST:-0.0.0.0}"
+        --port "$${SERVER_PORT:-8000}" --workers "$${SERVER_WORKERS:-1}"
+        --http1-buffer-size 10485760
+        main:app
+    depends_on:
+      - flaresolverr
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    environment:
+      TZ: Asia/Shanghai
+      LOG_LEVEL: info
+    restart: unless-stopped
