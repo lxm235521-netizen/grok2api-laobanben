@@ -67,7 +67,7 @@ class _VideoJob:
     video_url: str = ""
     content_path: str = ""
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, url: str = "") -> dict[str, Any]:
         d: dict[str, Any] = {
             "id": self.id,
             "object": "video",
@@ -82,6 +82,8 @@ class _VideoJob:
         }
         if self.completed_at is not None:
             d["completed_at"] = self.completed_at
+        if self.status == "completed" and url:
+            d["url"] = url
         if self.error is not None:
             d["error"] = self.error
         return d
@@ -494,10 +496,10 @@ def _video_cache_dir() -> Path:
     return d
 
 
-async def _download_video_bytes(video_url: str) -> Tuple[bytes, str]:
-    """Download video from *video_url*, return (bytes, content_path)."""
-    video_id = uuid.uuid4().hex
-    cache_path = _video_cache_dir() / f"{video_id}.mp4"
+async def _download_video_bytes(video_url: str, *, job_id: str = "") -> str:
+    """Download video from *video_url*, save to files video cache, return content_path."""
+    filename = f"users-{job_id}-generated_video.mp4" if job_id else f"{uuid.uuid4().hex}.mp4"
+    cache_path = _video_cache_dir() / filename
     tmp_path = cache_path.with_suffix(".mp4.tmp")
 
     session = ResettableSession()
@@ -600,7 +602,7 @@ async def _run_video_job(job: _VideoJob, payload: BaseModel, references: List[st
         job.progress = 80
         job.video_url = video_url
 
-        content_path = await _download_video_bytes(video_url)
+        content_path = await _download_video_bytes(video_url, job_id=job.id)
         job.content_path = content_path
 
         job.status = "completed"
@@ -724,12 +726,13 @@ async def create_video(request: Request):
 
 
 @router.get("/videos/{video_id}")
-async def retrieve_video(video_id: str):
+async def retrieve_video(video_id: str, request: Request):
     """Retrieve video job status.
 
     GET /v1/videos/{video_id}
 
     Returns the current state of the video generation job.
+    Completed jobs include a `url` field pointing to the downloadable content.
     """
     await _cleanup_expired_jobs()
     job = await _get_job(video_id)
@@ -744,7 +747,11 @@ async def retrieve_video(video_id: str):
                 }
             },
         )
-    return JSONResponse(content=job.to_dict())
+    content_url = ""
+    if job.status == "completed" and job.content_path:
+        base = str(request.base_url).rstrip("/")
+        content_url = f"{base}/v1/files/video/users/{video_id}/generated_video.mp4"
+    return JSONResponse(content=job.to_dict(url=content_url))
 
 
 @router.get("/videos/{video_id}/content")
