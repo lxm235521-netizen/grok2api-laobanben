@@ -84,6 +84,7 @@ class _VideoJob:
             d["completed_at"] = self.completed_at
         if self.status == "completed" and url:
             d["url"] = url
+            d["video_url"] = url
         if self.error is not None:
             d["error"] = self.error
         return d
